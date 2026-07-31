@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Trip Research Synthesizer — Demo</title>
+<style>
+  :root {
+    --accent: #C17B5C;
+    --accent-hover: #A86748;
+    --cream: #F5F0E8;
+    --charcoal: #2C2C2C;
+    --muted: #7A7267;
+    --border: #E0D5C5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--cream);
+    color: var(--charcoal);
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 40px 20px 80px; }
+  h1 { font-size: 1.8rem; margin-bottom: 4px; }
+  .description { color: var(--charcoal); margin-bottom: 12px; font-size: 1rem; line-height: 1.5; }
+  .subtitle { color: var(--muted); margin-bottom: 32px; font-size: 0.85rem; font-style: italic; }
+  label { display: block; font-weight: 600; font-size: 0.85rem; margin: 16px 0 6px; }
+  input, textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-family: inherit;
+    background: white;
+  }
+  textarea { min-height: 90px; resize: vertical; }
+  .row { display: flex; gap: 16px; }
+  .row > div { flex: 1; }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    margin-top: 20px;
+  }
+  button:hover { background: var(--accent-hover); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.secondary {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+  #status {
+    margin-top: 20px;
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+  #result-area { margin-top: 24px; }
+  .result-block {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-top: 16px;
+  }
+  .result-block h2 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--accent);
+    margin: 0 0 12px;
+  }
+  .result-block pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: inherit;
+    font-size: 0.92rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+  .actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  #error { color: #B3261E; margin-top: 16px; font-size: 0.9rem; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Trip Research Synthesizer</h1>
+  <p class="description">Give it a destination, dates, and who's coming, and it turns real trip research — TripAdvisor, Google Reviews, Yelp, local tourism boards — into one reconciled, group-filtered shortlist. It flags what's a good fit for the youngest and oldest in your group, calls out duplicates or conflicts with any notes a friend already sent you, and pauses for your approval before adding weather, travel time, and cost estimates.</p>
+  <p class="subtitle">Live demo — real web search, run via the Anthropic API. This can take up to a minute per step.</p>
+
+  <form id="intake-form">
+    <label for="destination">Destination</label>
+    <input id="destination" required placeholder="e.g. Kauai, Hawaii" maxlength="200" />
+
+    <div class="row">
+      <div>
+        <label for="start-date">Start date</label>
+        <input id="start-date" type="date" required />
+      </div>
+      <div>
+        <label for="end-date">End date</label>
+        <input id="end-date" type="date" required />
+      </div>
+    </div>
+
+    <label for="group">Group composition</label>
+    <input id="group" required placeholder="e.g. 2 adults, kids ages 4 and 8" maxlength="300" />
+
+    <label for="reference-notes">Reference notes (optional)</label>
+    <textarea id="reference-notes" placeholder="Paste any notes/suggestions a friend already sent you" maxlength="2000"></textarea>
+
+    <button type="submit" id="submit-btn">Get Draft List</button>
+  </form>
+
+  <div id="status" class="hidden"></div>
+  <div id="error" class="hidden"></div>
+  <div id="result-area"></div>
+</div>
+
+<script>
+  const form = document.getElementById("intake-form");
+  const submitBtn = document.getElementById("submit-btn");
+  const statusEl = document.getElementById("status");
+  const errorEl = document.getElementById("error");
+  const resultArea = document.getElementById("result-area");
+
+  let messages = [];
+  let phase = "draft"; // "draft" | "final"
+
+  function setStatus(text) {
+    statusEl.textContent = text;
+    statusEl.classList.toggle("hidden", !text);
+  }
+
+  function setError(text) {
+    errorEl.textContent = text;
+    errorEl.classList.toggle("hidden", !text);
+  }
+
+  function addResultBlock(title, text) {
+    const block = document.createElement("div");
+    block.className = "result-block";
+    const h2 = document.createElement("h2");
+    h2.textContent = title;
+    const pre = document.createElement("pre");
+    pre.textContent = text;
+    block.appendChild(h2);
+    block.appendChild(pre);
+    resultArea.appendChild(block);
+    block.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function callApi(disableEl) {
+    setError("");
+    setStatus("Researching live — this can take up to a minute...");
+    disableEl.disabled = true;
+    try {
+      const resp = await fetch("/api/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        setError(data.error || "Something went wrong.");
+        return null;
+      }
+      return data.text;
+    } catch (err) {
+      setError("Network error — is the demo server running?");
+      return null;
+    } finally {
+      setStatus("");
+      disableEl.disabled = false;
+    }
+  }
+
+  function renderApprovalControls() {
+    const controls = document.createElement("div");
+    controls.className = "result-block";
+
+    const label = document.createElement("label");
+    label.textContent = "Want changes before enrichment? (optional)";
+    const refineInput = document.createElement("textarea");
+    refineInput.placeholder = "e.g. drop the museum, add more outdoor options";
+
+    const actions = document.createElement("div");
+    actions.className = "actions";
+
+    const approveBtn = document.createElement("button");
+    approveBtn.textContent = "Approve & Continue";
+
+    const refineBtn = document.createElement("button");
+    refineBtn.textContent = "Refine Draft";
+    refineBtn.className = "secondary";
+
+    actions.appendChild(approveBtn);
+    actions.appendChild(refineBtn);
+    controls.appendChild(label);
+    controls.appendChild(refineInput);
+    controls.appendChild(actions);
+    resultArea.appendChild(controls);
+
+    approveBtn.addEventListener("click", async () => {
+      controls.remove();
+      messages.push({
+        role: "user",
+        content: "This looks good — please continue with the enrichment step and give me the final shortlist.",
+      });
+      const text = await callApi(approveBtn);
+      if (text) {
+        messages.push({ role: "assistant", content: text });
+        addResultBlock("Final Shortlist", text);
+        phase = "final";
+      } else {
+        resultArea.appendChild(controls);
+      }
+    });
+
+    refineBtn.addEventListener("click", async () => {
+      const note = refineInput.value.trim();
+      if (!note) return;
+      controls.remove();
+      messages.push({ role: "user", content: `Please revise the draft: ${note}` });
+      const text = await callApi(refineBtn);
+      if (text) {
+        messages.push({ role: "assistant", content: text });
+        addResultBlock("Revised Draft List", text);
+        renderApprovalControls();
+      } else {
+        resultArea.appendChild(controls);
+      }
+    });
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    resultArea.innerHTML = "";
+    setError("");
+
+    const destination = document.getElementById("destination").value.trim();
+    const startDate = document.getElementById("start-date").value;
+    const endDate = document.getElementById("end-date").value;
+    const group = document.getElementById("group").value.trim();
+    const refNotes = document.getElementById("reference-notes").value.trim();
+
+    let intake = `Destination: ${destination}\nTrip dates: ${startDate} to ${endDate}\nGroup composition: ${group}`;
+    if (refNotes) {
+      intake += `\n\nHere are reference notes from a friend/co-traveler:\n${refNotes}`;
+    } else {
+      intake += `\n\nNo reference notes were provided.`;
+    }
+
+    messages = [{ role: "user", content: intake }];
+    phase = "draft";
+
+    const text = await callApi(submitBtn);
+    if (text) {
+      messages.push({ role: "assistant", content: text });
+      addResultBlock("Draft List", text);
+      renderApprovalControls();
+    }
+  });
+</script>
+</body>
+</html>
