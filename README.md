@@ -20,6 +20,10 @@ Built with Anthropic's [AI Workflow Framework](https://github.com/jamesgray-ai/h
 
 `trip-research-synthesizer.md` is a self-contained prompt (not a Workspace Agent — those require a Business/Enterprise/Edu plan). Recommended: upload it as a file in a ChatGPT Project with a short custom-instructions pointer — see the Deployment Guide for the exact text.
 
+### `website/` — Standalone demo site
+
+A static landing page and planner UI ([`website/index.html`](website/index.html), [`website/planner.html`](website/planner.html)) with the same draft → review → enrich → final flow, plus real Salt Lake City photos and an instant example run that needs no API key. Live generation is optional: [`website/api/generate.js`](website/api/generate.js) is a serverless function that calls the Anthropic API with real web search when you supply your own `ANTHROPIC_API_KEY` — see [`website/README.md`](website/README.md) for setup. This replaces the earlier `demo/` (a local Express prototype); its real-API-call approach lives on inside `website/api/`.
+
 ## How it works
 
 1. Give it a destination, trip dates, group composition (ages/count), and optionally a reference doc/spreadsheet from a friend.

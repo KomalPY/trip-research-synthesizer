@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trip Shortlister</title>
+<meta name="description" content="Turn a destination, dates and group into one filtered trip shortlist, grouped by area and early, middle and later days, with closures and unknowns flagged.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1 class="brand"><a href="index.html">Trip <span>Shortlister</span></a></h1>
+    <nav><a class="btn quiet" href="planner.html">Open the planner</a></nav>
+  </header>
+
+  <main>
+    <section class="lp-hero" aria-labelledby="hero-title">
+      <img data-photo="city1" alt="">
+      <div class="shade"></div>
+      <span class="hero-credit" data-credit="city1"></span>
+      <div class="copy">
+        <span class="lp-eyebrow">Group trip research</span>
+        <h2 id="hero-title">Plan the trip once, not three times.</h2>
+        <p>Tell it where you're going, when, and who's coming. Get one filtered shortlist, grouped by area and by early, middle and later days, with the shaky facts flagged instead of hidden.</p>
+        <div class="lp-cta">
+          <a class="btn primary" href="planner.html">Plan a trip</a>
+          <a class="btn ghost" href="planner.html?example=1">See an example</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-section" aria-labelledby="how">
+      <h2 id="how">How it works</h2>
+      <p class="sub">Two review points keep you in control before any effort goes into logistics.</p>
+      <ol class="lp-steps">
+        <li><strong>Tell it the trip</strong><span>Destination, dates, group size, who's traveling, and any expectations, like one medium hike or fall colors.</span></li>
+        <li><strong>Review the draft</strong><span>Places and activities only, grouped by area and loose day range. Say what to add, cut or swap.</span></li>
+        <li><strong>Approve to add logistics</strong><span>Weather, travel time, transport and cost for each item, then a final round of feedback.</span></li>
+      </ol>
+    </section>
+
+    <section class="lp-section" aria-labelledby="trust">
+      <h2 id="trust">What it flags for you</h2>
+      <p class="sub">A shortlist is only useful if you know which parts to double-check.</p>
+      <div class="lp-trust">
+        <div><h3>Verify before you plan around it</h3><p>Closures, seasonal hours and event dates that could be stale are marked, with what to check.</p></div>
+        <div><h3>Local and tourist picks, both</h3><p>Every item is tagged, so you get the safe bets and the differentiated ones, not only the famous list.</p></div>
+        <div><h3>Fit for the whole group</h3><p>Each item says who it suits and offers an alternate when it doesn't suit everyone.</p></div>
+      </div>
+    </section>
+
+    <section class="lp-section" aria-labelledby="ex">
+      <h2 id="ex">Example: Salt Lake City in October</h2>
+      <p class="sub">Three adults, three days, one medium-level hike. A few items from the result:</p>
+      <div class="lp-cards">
+        <article class="lp-card"><img data-photo="ensign1" alt=""><h3>Ensign Peak</h3><p>A half-mile climb to a skyline view over the city and the Great Salt Lake.</p><span class="cap" data-credit="ensign1"></span></article>
+        <article class="lp-card"><img data-photo="ai1" alt=""><h3>Antelope Island State Park</h3><p>Causeway drive with wild bison; fall is prime wildlife viewing.</p><span class="cap" data-credit="ai1"></span></article>
+        <article class="lp-card"><img data-photo="lcc1" alt=""><h3>Snowbird Oktoberfest</h3><p>Flagged Verify: 2026 dates are unconfirmed, so check them against your trip.</p><span class="cap" data-credit="lcc1"></span></article>
+      </div>
+      <div class="lp-cta" style="margin-top:22px"><a class="btn primary" href="planner.html?example=1">Open the full example</a></div>
+    </section>
+  </main>
+
+  <footer class="lp-foot">
+    <p>Shortlists are written by Claude from its own knowledge, without live web search. Hours, closures and event dates change, so anything marked Verify needs a check before you book.</p>
+    <details>
+      <summary>Photo credits</summary>
+      <ul id="credits"></ul>
+    </details>
+  </footer>
+</div>
+
+<script src="js/data.js"></script>
+<script>
+(function () {
+  function credit(el, p, bare) {
+    var a = document.createElement("a");
+    a.href = p.page; a.target = "_blank"; a.rel = "noopener noreferrer";
+    a.textContent = p.artist + " · " + p.license;
+    if (!bare) el.append("Photo: ");
+    el.append(a);
+  }
+  document.querySelectorAll("[data-photo]").forEach(function (img) {
+    var p = PHOTOS[img.getAttribute("data-photo")];
+    if (p) { img.src = p.src; img.alt = p.alt; }
+  });
+  document.querySelectorAll("[data-credit]").forEach(function (el) {
+    var p = PHOTOS[el.getAttribute("data-credit")];
+    if (p) credit(el, p);
+  });
+  var list = document.getElementById("credits");
+  Object.keys(PHOTOS).forEach(function (k) {
+    var p = PHOTOS[k], li = document.createElement("li");
+    li.append(p.alt + ": ");
+    credit(li, p, true);
+    list.append(li);
+  });
+})();
+</script>
+</body>
+</html>
