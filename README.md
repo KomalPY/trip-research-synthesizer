@@ -24,6 +24,8 @@ Built with Anthropic's [AI Workflow Framework](https://github.com/jamesgray-ai/h
 
 A static landing page and planner UI ([`website/index.html`](website/index.html), [`website/planner.html`](website/planner.html)) with the same draft → review → enrich → final flow, plus real Salt Lake City photos and an instant example run that needs no API key. Live generation is optional: [`website/api/generate.js`](website/api/generate.js) is a serverless function that calls the Anthropic API with real web search when you supply your own `ANTHROPIC_API_KEY` — see [`website/README.md`](website/README.md) for setup. This replaces the earlier `demo/` (a local Express prototype); its real-API-call approach lives on inside `website/api/`.
 
+After the shortlist is approved, the site continues into a **Where to stay** step: it works out where the group should sleep, searches lodging for each place, tags budget-friendly / comfort / stretch options against a per-person budget, and gives the group one link to vote and comment ([`website/stay.html`](website/stay.html); a demo with placeholder data is at `stay.html?demo=1`). Sharing and voting need an Upstash Redis database; see [`website/README.md`](website/README.md).
+
 ## How it works
 
 1. Give it a destination, trip dates, group composition (ages/count), and optionally a reference doc/spreadsheet from a friend.

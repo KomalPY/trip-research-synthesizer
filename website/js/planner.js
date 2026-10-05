@@ -59,7 +59,8 @@
     ctl: null,
     status: "",
     error: "",
-    approved: false
+    lodging: null,
+    lodgingCtl: null
   };
 
   var PHOTO_RULES = [
@@ -101,7 +102,7 @@
     );
   }
 
-  var EXAMPLE_TRIP = { destination: "Salt Lake City, Utah", start: "2026-10-16", end: "2026-10-18", days: 3, size: 3, who: "3 adult women, ages 30s to 50s", notes: "One medium-level hike. A mix of tourist highlights and local favorites. Fall colors if possible." };
+  var EXAMPLE_TRIP = { destination: "Salt Lake City, Utah", start: "2026-10-16", end: "2026-10-18", days: 3, size: 3, who: "3 adult women, ages 30s to 50s", notes: "One medium-level hike. A mix of tourist highlights and local favorites. Fall colors if possible.", budget: "", prefs: "" };
   var EXAMPLE = {
     meta: {
       assumptions: "3 adults in their 30s to 50s, treated as a general adult audience with moderate fitness. No reference doc was provided, so there are no duplicate or conflict flags.",
@@ -129,6 +130,8 @@
     $("size").value = EXAMPLE_TRIP.size;
     $("who").value = EXAMPLE_TRIP.who;
     $("notes").value = EXAMPLE_TRIP.notes;
+    $("budget").value = EXAMPLE_TRIP.budget;
+    $("prefs").value = EXAMPLE_TRIP.prefs;
     syncForm();
     state.trip = EXAMPLE_TRIP;
     state.meta = EXAMPLE.meta;
@@ -137,7 +140,7 @@
     state.feedbackLog = [];
     state.fbText = "";
     state.error = "";
-    state.approved = false;
+    state.lodging = null;
     render();
   }
 
@@ -174,7 +177,9 @@
       days: d,
       size: n,
       who: $("who").value.trim(),
-      notes: $("notes").value.trim()
+      notes: $("notes").value.trim(),
+      budget: $("budget").value.trim(),
+      prefs: $("prefs").value.trim()
     };
   }
 
@@ -212,7 +217,7 @@
     var acc = { meta: null, items: [] };
     state.busy = true;
     state.error = "";
-    state.approved = false;
+    state.lodging = null;
     state.status = "Searching and writing the shortlist. This can take up to a minute.";
     if (kind === "draft" || kind === "revise-draft") state.stage = "draft";
     if (kind === "enrich" || kind === "revise-final") state.stage = "final";
@@ -307,8 +312,8 @@
   }
 
   function stepper() {
-    var idx = state.stage === "final" ? 2 : state.stage === "draft" ? 1 : 0;
-    var labels = ["Trip details", "Review draft", "Final shortlist"];
+    var idx = state.stage === "lodging" ? 3 : state.stage === "final" ? 2 : state.stage === "draft" ? 1 : 0;
+    var labels = ["Trip details", "Review draft", "Final shortlist", "Where to stay"];
     return h("ol", { class: "steps", style: "list-style:none;padding:0" }, labels.map(function (l, n) {
       var cls = "step" + (n === idx ? " now" : n < idx ? " done" : "");
       return h("li", { class: cls, "aria-current": n === idx ? "step" : null }, h("span", { class: "dot" }, n < idx ? "✓" : String(n + 1)), l);
@@ -332,22 +337,190 @@
       h("button", { type: "button", class: "btn secondary", onclick: send }, isDraft ? "Revise this draft" : "Revise this shortlist"),
       isDraft
         ? h("button", { type: "button", class: "btn primary", onclick: function () { run("enrich"); } }, "Approve and add details")
-        : h("button", { type: "button", class: "btn primary", onclick: function () { state.approved = true; render(); } }, "Looks good")
+        : h("button", { type: "button", class: "btn primary", onclick: startLodging }, "Looks good, find places to stay")
     );
     return h("div", { class: "feedback" },
       h("h3", null, isDraft ? "Feedback on the draft" : "Feedback on the final shortlist"),
       h("p", { class: "hint" }, isDraft
         ? "Places and activities only so far. Tell me what to add, cut or swap, or approve to add weather, travel time, transport and costs."
-        : "Tell me what to adjust, or approve it to hand it to lodging search and day-by-day planning."),
+        : "Tell me what to adjust. When it looks right, I'll search for places to stay near these plans" + (state.trip && state.trip.budget ? ", using the budget you gave." : ".")),
       ta, actions
     );
+  }
+
+  // ---------- Where to stay ----------
+  var STAY_ERR = {
+    no_backend: "Finding places to stay needs the optional backend (see README). Your shortlist is unchanged.",
+    rate_limited: "You've hit a usage limit. Wait a bit, then try again.",
+    invalid_request: "That request wasn't valid. Check your trip details and try again."
+  };
+
+  function stayCall(body, signal) {
+    return fetch(Lodging.apiBase() + "/accommodations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: signal })
+      .then(function (r) {
+        if (r.status === 404 || r.status === 405 || r.status === 501) throw { code: "no_backend" };
+        if (r.status === 429) throw { code: "rate_limited" };
+        if (r.status === 400) throw { code: "invalid_request" };
+        if (!r.ok) throw { code: "upstream_error" };
+        return r.json();
+      })
+      .catch(function (e) {
+        if (e && e.name === "AbortError") throw { code: "cancelled" };
+        if (e && e.code) throw e;
+        throw { code: "upstream_error" };
+      });
+  }
+
+  function tripForApi() {
+    var t = state.trip;
+    return { destination: t.destination, start: t.start, end: t.end, days: t.days, size: t.size, who: t.who || "", notes: t.notes || "", budget: t.budget || "", prefs: t.prefs || "" };
+  }
+  function stayData() {
+    var L = state.lodging, t = state.trip;
+    return { trip: { destination: t.destination, start: t.start, end: t.end, days: t.days, size: t.size }, bases: L.bases, results: L.results, meta: L.meta };
+  }
+  function stayMessage(e) {
+    if (e && e.code === "cancelled") return "Stopped. Your shortlist is unchanged.";
+    return STAY_ERR[e && e.code] || "Something interrupted the search. Your shortlist is unchanged. Try again.";
+  }
+  function syncShared() {
+    var L = state.lodging;
+    if (L && L.share) Lodging.postJson("/poll", { action: "update", share: L.share, ownerKey: L.ownerKey, snapshot: stayData() }).catch(function () { /* the owner's page still has the latest */ });
+  }
+
+  // Searches one lodging base. With `more`, adds new options for the group's feedback instead of replacing.
+  function searchBase(base, index, total, more) {
+    var L = state.lodging;
+    L.progress[base.location] = "searching";
+    state.status = "Searching places to stay in " + base.location + (total > 1 ? " (" + (index + 1) + " of " + total + ")" : "") + ". This can take a minute or two.";
+    render();
+    var body = more
+      ? { mode: "more", trip: tripForApi(), base: base, existing: more.existing, feedback: more.feedback }
+      : { mode: "search", trip: tripForApi(), base: base };
+    return stayCall(body, state.ctl.signal).then(function (r) {
+      if (!L.meta && r.meta) L.meta = r.meta;
+      if (more) {
+        var res = L.results[base.location] || { market: r.location.market, note: r.location.note, options: [] };
+        var have = {};
+        res.options.forEach(function (o) { have[o.id] = true; });
+        (r.options || []).forEach(function (o) { if (!have[o.id] && res.options.length < 10) res.options.push(o); });
+        L.results[base.location] = res;
+      } else {
+        L.results[base.location] = { market: r.location.market, note: r.location.note, options: r.options || [] };
+      }
+      L.progress[base.location] = "done";
+    }, function (e) {
+      if (e && e.code === "cancelled") throw e;
+      L.progress[base.location] = "done";
+      if (more) { state.error = stayMessage(e); return; }
+      if (e && e.code === "no_backend") throw e;
+      L.results[base.location] = { error: STAY_ERR[e && e.code] || "The search service had a problem." };
+    });
+  }
+
+  function endBusy() { state.busy = false; state.status = ""; render(); }
+
+  function startLodging() {
+    if (state.busy) return;
+    if (state.lodging && state.lodging.phase === "done") { state.stage = "lodging"; state.error = ""; render(); return; }
+    var L = state.lodging = { phase: "planning", bases: [], results: {}, progress: {}, meta: null, share: null, ownerKey: null, shareUrl: null, note: "" };
+    state.stage = "lodging";
+    state.error = "";
+    state.busy = true;
+    state.ctl = new AbortController();
+    state.status = "Working out where you'll sleep, based on your itinerary.";
+    render();
+
+    var plan = { mode: "plan", trip: tripForApi(), items: state.items.map(function (i) { return { name: i.name, location: i.location, cluster: i.cluster }; }) };
+    stayCall(plan, state.ctl.signal).then(function (r) {
+      L.bases = r.bases || [];
+      L.phase = "searching";
+      var chain = Promise.resolve();
+      L.bases.forEach(function (b, i) { chain = chain.then(function () { return searchBase(b, i, L.bases.length, null); }); });
+      return chain;
+    }).then(function () {
+      L.phase = "done";
+      var any = L.bases.some(function (b) { return (L.results[b.location] || {}).options && L.results[b.location].options.length; });
+      if (!any) return null;
+      return Lodging.postJson("/poll", { action: "create", snapshot: stayData() }).then(function (r) {
+        L.share = r.share;
+        L.ownerKey = r.ownerKey;
+        L.shareUrl = new URL("stay.html?share=" + encodeURIComponent(r.share), location.href).href;
+      }, function () {
+        L.note = "Sharing and voting need the optional storage service (see README). The comparison below still works.";
+      });
+    }).then(endBusy, function (e) {
+      state.lodging = null;
+      state.stage = "final";
+      state.error = stayMessage(e);
+      endBusy();
+    });
+  }
+
+  function reSearch(location, more) {
+    var L = state.lodging;
+    if (!L || state.busy) return;
+    var idx = -1;
+    L.bases.forEach(function (b, i) { if (b.location === location) idx = i; });
+    if (idx < 0) return;
+    state.busy = true;
+    state.error = "";
+    state.ctl = new AbortController();
+    searchBase(L.bases[idx], idx, L.bases.length, more).then(function () { syncShared(); endBusy(); }, function (e) { state.error = stayMessage(e); endBusy(); });
+  }
+  function moreFor(location, text) {
+    var res = (state.lodging.results[location] || {});
+    reSearch(location, { feedback: text, existing: (res.options || []).map(function (o) { return { name: o.name, link: o.link }; }) });
+  }
+  function retryFor(location) { reSearch(location, null); }
+
+  function lodgingProgress() {
+    var L = state.lodging;
+    var rows = L.bases.map(function (b) {
+      var st = L.progress[b.location] || "waiting";
+      return h("li", { class: "prog " + st },
+        h("span", { class: "dot" }, st === "done" ? "✓" : ""),
+        h("span", null, b.location + " · " + b.nights + (b.nights === 1 ? " night" : " nights")),
+        h("span", { class: "hint" }, st === "searching" ? "Searching" : st === "done" ? "Done" : "Waiting"));
+    });
+    return h("div", { class: "intro" },
+      h("h2", null, "Finding places to stay"),
+      L.bases.length ? h("ul", { class: "prog-list" }, rows)
+        : h("p", { class: "hint" }, "Choosing where to base yourselves, so we don't search towns you'll only visit for the day."));
+  }
+
+  function renderLodging(root) {
+    var L = state.lodging;
+    root.append(stepper());
+    root.append(h("div", { class: "actions" },
+      h("button", { type: "button", class: "btn secondary", disabled: state.busy, onclick: function () { state.stage = "final"; state.error = ""; render(); } }, "Back to the shortlist")));
+    if (L.phase !== "done") root.append(lodgingProgress());
+    else {
+      if (L.note) root.append(h("p", { class: "notice" }, L.note));
+      var box = h("div", { class: "stay" });
+      root.append(box);
+      state.lodgingCtl = Lodging.mount(box, stayData(), {
+        adapter: L.share ? Lodging.pollAdapter(L.share) : null,
+        shareUrl: L.shareUrl,
+        owner: { onMore: moreFor, onRetry: retryFor }
+      });
+    }
+    if (state.busy) {
+      root.append(h("div", { class: "status", role: "status" },
+        h("span", { class: "pulse" }), h("span", null, state.status),
+        h("button", { type: "button", class: "btn secondary", onclick: function () { if (state.ctl) state.ctl.abort(); } }, "Stop")));
+    }
+    if (state.error) root.append(h("p", { class: "error", role: "alert" }, state.error));
   }
 
   function render() {
     var root = $("results");
     var gen = $("generate");
     gen.disabled = state.busy;
+    if (state.lodgingCtl) { state.lodgingCtl.destroy(); state.lodgingCtl = null; }
     root.textContent = "";
+
+    if (state.stage === "lodging" && state.lodging) { renderLodging(root); return; }
 
     if (state.stage === "form" && !state.busy && !state.items.length) {
       root.append(stepper(), h("div", { class: "intro" },
@@ -355,7 +528,8 @@
         h("ol", null,
           h("li", null, h("strong", null, "Fill in the trip. "), "Destination, dates, group size and any expectations."),
           h("li", null, h("strong", null, "Review the draft. "), "You get places and activities grouped by area and loose day range. Tell me what to change."),
-          h("li", null, h("strong", null, "Approve to add logistics. "), "Weather, travel time, transport and cost per item, then a final round of feedback.")
+          h("li", null, h("strong", null, "Approve to add logistics. "), "Weather, travel time, transport and cost per item, then a final round of feedback."),
+          h("li", null, h("strong", null, "Compare places to stay. "), "We search lodging near your plans, then give your group one link to vote and comment.")
         ),
         h("div", { class: "example-row" },
           h("button", { type: "button", class: "btn secondary", onclick: loadExample }, "See an example result"),
@@ -384,7 +558,7 @@
         h("h2", null, state.stage === "final" ? "Final shortlist" : "Draft shortlist"),
         t ? h("p", { class: "trip-line" }, t.destination + " · " + fmt(parseDate(t.start)) + " to " + fmt(parseDate(t.end)) + " · " + t.days + "d · " + t.size + (t.size === 1 ? " traveler" : " travelers")) : null
       ),
-      h("span", { class: "stage-pill" }, state.stage === "final" ? "Step 3 of 3" : "Step 2 of 3")
+      h("span", { class: "stage-pill" }, state.stage === "final" ? "Step 3 of 4" : "Step 2 of 4")
     ));
     root.append(h("p", { class: "notice" }, "Backed by real web search when the optional backend is configured. Hours, closures and event dates still change, so anything marked Verify needs a check before you plan around it."));
 
@@ -405,17 +579,7 @@
     }
     if (state.error) root.append(h("p", { class: "error", role: "alert" }, state.error));
 
-    if (!state.busy && state.items.length) {
-      if (state.approved) {
-        root.append(h("div", { class: "approved" },
-          h("h3", null, "Shortlist approved"),
-          h("p", null, "This is ready to feed the next two steps: accommodation search for each area, then the day-by-day itinerary. Anything marked Verify still needs a check first."),
-          h("div", null, h("button", { type: "button", class: "btn secondary", onclick: function () { state.approved = false; render(); } }, "Keep editing"))
-        ));
-      } else {
-        root.append(feedbackPanel());
-      }
-    }
+    if (!state.busy && state.items.length) root.append(feedbackPanel());
   }
 
   render();

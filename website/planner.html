@@ -57,6 +57,19 @@
         <textarea id="notes">One medium-level hike. A mix of tourist highlights and local favorites. Fall colors if possible.</textarea>
       </div>
 
+      <fieldset class="form-section">
+        <legend>Where you'll stay <span class="hint">Optional</span></legend>
+        <p class="hint">Used after you approve the shortlist, when we look for places to stay.</p>
+        <div class="field">
+          <label for="budget">Budget per person, per night</label>
+          <input type="text" id="budget" placeholder="e.g. $150 per person per night" autocomplete="off" maxlength="300">
+        </div>
+        <div class="field">
+          <label for="prefs">Accommodation preferences</label>
+          <textarea id="prefs" maxlength="1000" placeholder="e.g. a kitchen, a pool, step-free access, quiet at night"></textarea>
+        </div>
+      </fieldset>
+
       <p class="form-error" id="form-error" role="alert"></p>
       <button type="submit" class="btn primary" id="generate">Generate the itinerary</button>
     </form>
@@ -65,6 +78,7 @@
   </div>
 </div>
 <script src="js/data.js"></script>
+<script src="js/lodging.js"></script>
 <script src="js/planner.js"></script>
 </body>
 </html>
