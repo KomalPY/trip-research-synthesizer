@@ -26,6 +26,10 @@ A static landing page and planner UI ([`website/index.html`](website/index.html)
 
 After the shortlist is approved, the site continues into a **Where to stay** step: it works out where the group should sleep, searches lodging for each place, tags budget-friendly / comfort / stretch options against a per-person budget, and gives the group one link to vote and comment ([`website/stay.html`](website/stay.html); a demo with placeholder data is at `stay.html?demo=1`). Sharing and voting need an Upstash Redis database; see [`website/README.md`](website/README.md).
 
+### `workflow-2-accommodation/` — The next workflow in the chain
+
+Requirements ([`requirements.md`](workflow-2-accommodation/requirements.md)) and Design Spec ([`design-spec.md`](workflow-2-accommodation/design-spec.md)) for Accommodation Search & Group Booking Coordination, which consumes this workflow's approved shortlist. It is built into `website/` as the Where to stay step; the spec's Build Notes record what changed during the build.
+
 ## How it works
 
 1. Give it a destination, trip dates, group composition (ages/count), and optionally a reference doc/spreadsheet from a friend.
